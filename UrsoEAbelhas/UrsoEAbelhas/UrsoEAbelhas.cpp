@@ -1,21 +1,21 @@
 /*********************************************************************************
 *
-*  AUTOMAÇÃO EM TEMPO REAL - ELT012
+*  AUTOMAï¿½ï¿½O EM TEMPO REAL - ELT012
 *  Prof. Luiz T. S. Mendes - 2019/1
 *
 *  Atividade em classe - 27/03/2019
 *
-*  Este programa deve ser completado com as linhas de programa necessárias
+*  Este programa deve ser completado com as linhas de programa necessï¿½rias
 *  para solucionar o "problema do urso e das abelhas" ("The Bear and the Honeybees",
 *  G. Andrew, "Multithread, Parallel and Distributed Computing",
 *  Addison-Wesley, 2000).
 *
-* O programa é composto de uma thread primária e 21 threads secundárias. A thread
-* primária cria os objetos de sincronização e as threads secundárias. As threads
-* secundárias correspondem a um urso e 20 abelhas.
+* O programa ï¿½ composto de uma thread primï¿½ria e 21 threads secundï¿½rias. A thread
+* primï¿½ria cria os objetos de sincronizaï¿½ï¿½o e as threads secundï¿½rias. As threads
+* secundï¿½rias correspondem a um urso e 20 abelhas.
 *
-* A sinalização de término de programa é feita através da tecla ESC. Leituras da
-* última tecla digitada devem ser feitas em pontos apropriados para que as threads
+* A sinalizaï¿½ï¿½o de tï¿½rmino de programa ï¿½ feita atravï¿½s da tecla ESC. Leituras da
+* ï¿½ltima tecla digitada devem ser feitas em pontos apropriados para que as threads
 * detectem esta tecla.
 *
 **********************************************************************************/
@@ -30,7 +30,7 @@
 #include <semaphore.h>
 
 #define	ESC				0x1B			// Tecla para encerrar o programa
-#define N_ABELHAS		20				// Número de abelhas
+#define N_ABELHAS		20				// Nï¿½mero de abelhas
 #define MAX_PORCOES     10              // Capacidade do pote de mel
 
 #define WHITE    FOREGROUND_RED   | FOREGROUND_GREEN     | FOREGROUND_BLUE
@@ -43,20 +43,29 @@
 void *Thread_Abelha(void *arg);
 void *Thread_Urso(void *arg);
 
-/* Declaração dos objetos de sincronização */
+/* Declaraï¿½ï¿½o dos objetos de sincronizaï¿½ï¿½o */
 pthread_mutexattr_t MutexAttr;
 pthread_mutex_t AcessaPote;		// Mutex para proteger acesso ao pote de mel
-sem_t AcordaUrso;				// Semáforo para acordar o urso
+sem_t AcordaUrso;				// Semï¿½foro para acordar o urso
 
-int nTecla;						// Variável que armazena a tecla digitada para sair
-int nPorcoes = 0;				// Número de porcoes depositadas no pote de mel
+int nTecla;						// Variï¿½vel que armazena a tecla digitada para sair
+int nPorcoes = 0;				// Nï¿½mero de porcoes depositadas no pote de mel
 
-HANDLE hOut;					 //Handle para a saída da console
+HANDLE hOut;					 //Handle para a saï¿½da da console
+
+struct fifo_node{
+	int value;
+	struct fifo_node* next;
+};
+
+struct fifo_node * first_node_thread;
+struct fifo_node * last_node_thread;
+int fifo_size=0;
 
 /*=====================================================================================*/
 /* Corpo das funcoes locais Wait(), Signal(), LockMutex e UnLockMutex. Estas funcoes   */
 /* assumem que o semaforo [Wait() e Signal()] ou o mutex [LockMutex() e UnLockMutex()] */
-/* recebido como parametro ja´ tenha sido previamente criado.                          */
+/* recebido como parametro jaï¿½ tenha sido previamente criado.                          */
 /*=====================================================================================*/
 
 void Wait(sem_t *Semaforo) {
@@ -77,16 +86,62 @@ void Signal(sem_t *Semaforo) {
 	}
 }
 
-void LockMutex(pthread_mutex_t *Mutex) {
+void LockMutex(pthread_mutex_t *Mutex, int thread_num) {
 	int status;
-	status = pthread_mutex_lock(Mutex);
-	if (status != 0) {
-		printf("Erro na conquista do mutex! Codigo = %d\n", status);
-		exit(0);
+
+	// status = pthread_mutex_lock(Mutex);
+	// if (status != 0) {
+	// 	printf("Erro na conquista do mutex! Codigo = %d\n", status);
+	// 	exit(0);
+	// }
+	// printf("Add %d to fifo (%d)\n", thread_num, ++fifo_size);
+	
+	struct fifo_node * new_node = (struct fifo_node *) malloc(sizeof(struct fifo_node));
+	new_node->value = thread_num;
+	new_node->next = NULL;
+	if(first_node_thread == NULL){
+		first_node_thread = new_node;
+		last_node_thread = new_node;
+	}
+	last_node_thread->next = new_node;
+	last_node_thread = new_node;
+	fifo_size++;
+
+	while(1){
+		status = pthread_mutex_lock(Mutex);
+		if (status != 0) {
+			printf("Erro na conquista do mutex! Codigo = %d\n", status);
+			exit(0);
+		}
+		if (first_node_thread->value == thread_num){
+			// printf("Thread %d got the mutex\n", thread_num);
+			break;
+		}
+		else {
+			// printf("Thread %d cannot get the mutex, it's %d turn\n", thread_num, first_node_thread->value);
+			status = pthread_mutex_unlock(Mutex);
+			if (status != 0) {
+				printf("Erro na liberacao do mutex! Codigo = %d\n", status);
+				exit(0);
+			}
+		}
 	}
 }
 
 void UnLockMutex(pthread_mutex_t *Mutex) {
+	// printf("Remove %d from fifo (%d)\n", first_node_thread->value, --fifo_size);
+
+	struct fifo_node *curr = first_node_thread;
+	if(last_node_thread == first_node_thread) {
+		first_node_thread = NULL;
+		last_node_thread = NULL;
+	}
+	else {
+		first_node_thread = first_node_thread->next;
+	}
+	free(curr);
+	fifo_size--;
+
 	int status;
 	status = pthread_mutex_unlock(Mutex);
 	if (status != 0) {
@@ -105,15 +160,15 @@ int main(){
 	int i, status;
 
 	// --------------------------------------------------------------------------
-    // Obtém um handle para a saída da console
+    // Obtï¿½m um handle para a saï¿½da da console
     // --------------------------------------------------------------------------
 
 	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hOut == INVALID_HANDLE_VALUE)
-		printf("Erro ao obter handle para a saída da console\n");
+		printf("Erro ao obter handle para a saï¿½da da console\n");
 
 	// --------------------------------------------------------------------------
-	// Criação dos mutexes
+	// Criaï¿½ï¿½o dos mutexes
 	// --------------------------------------------------------------------------
 
 	pthread_mutexattr_init(&MutexAttr); //sempre retorna 0
@@ -124,12 +179,12 @@ int main(){
 	}
 	status = pthread_mutex_init(&AcessaPote, &MutexAttr);
 	if (status != 0) {
-		printf("Erro na criação do mutex AcessaPote! Codigo = %d\n", status);
+		printf("Erro na criaï¿½ï¿½o do mutex AcessaPote! Codigo = %d\n", status);
 		exit(0);
 	}
 	
 	// --------------------------------------------------------------------------
-	// Criação do semáforo binário
+	// Criaï¿½ï¿½o do semï¿½foro binï¿½rio
 	// --------------------------------------------------------------------------
 
 	status = sem_init(&AcordaUrso, 0, 0); //sempre retorna 0
@@ -139,9 +194,9 @@ int main(){
 	}
 
 	// --------------------------------------------------------------------------
-	// Criação das threads secundárias
+	// Criaï¿½ï¿½o das threads secundï¿½rias
 	// --------------------------------------------------------------------------
-
+	first_node_thread = NULL;
 	for (i = 0; i < N_ABELHAS; i++) {
 		status = pthread_create(&hThreads[i], NULL, Thread_Abelha, (void *)i);
 		SetConsoleTextAttribute(hOut, WHITE);
@@ -184,7 +239,7 @@ int main(){
 	}
 	
 	// --------------------------------------------------------------------------
-	// Elimina os objetos de sincronização criados
+	// Elimina os objetos de sincronizaï¿½ï¿½o criados
 	// --------------------------------------------------------------------------
 
 	SetConsoleTextAttribute(hOut, WHITE);
@@ -208,7 +263,7 @@ void *Thread_Abelha(void *arg) {  /* Threads representando as abelhas */
 	do {
 
 		// ACRESCENTE OS COMANDOS DE SINCRONIZACAO VIA SEMAFOROS ONDE NECESSARIO
-		LockMutex(&AcessaPote);
+		LockMutex(&AcessaPote, i);
 
 		// Deposita uma porcao de mel no pote e incrementa a contagem de porcoes
 		if (nPorcoes < MAX_PORCOES) {
@@ -224,16 +279,16 @@ void *Thread_Abelha(void *arg) {  /* Threads representando as abelhas */
 		
 		UnLockMutex(&AcessaPote);
 
-		// Dorme um tempo apenas para facilitar visualização das mensagens
-		Sleep(100);
+		// Dorme um tempo apenas para facilitar visualizaï¿½ï¿½o das mensagens
+		//Sleep(100);
 
 	} while (nTecla != ESC);
 
-	// Encerramento da thread. Aqui passamos (a título de exemplo) o valor da variável "i"
+	// Encerramento da thread. Aqui passamos (a tï¿½tulo de exemplo) o valor da variï¿½vel "i"
 	// como status de encerramento da thread.
 	printf("Thread abelha %d encerrando execucao...\n", i);
 	pthread_exit((void *) i);
-	// O comando "return" abaixo é desnecessário, mas presente aqui para compatibilidade
+	// O comando "return" abaixo ï¿½ desnecessï¿½rio, mas presente aqui para compatibilidade
 	// com o Visual Studio da Microsoft
 	return(0);
 }//Thread abelha
@@ -251,18 +306,18 @@ void *Thread_Urso(void *arg) {  /* Thread representando o urso */
 		Wait(&AcordaUrso);
 
 		//Esvazia o pote de mel
-		LockMutex(&AcessaPote);
+		LockMutex(&AcessaPote, i);
 		printf("Urso consumiu todo o mel do pote\n");
 		nPorcoes = 0;
 		UnLockMutex(&AcessaPote);
 
 	} while (nTecla != ESC);
 
-	// Encerramento da thread. Aqui passamos (a título de exemplo) o valor da variável "i"
+	// Encerramento da thread. Aqui passamos (a tï¿½tulo de exemplo) o valor da variï¿½vel "i"
 	// como status de encerramento da thread.
 	printf("Thread urso encerrando execucao...\n");
 	pthread_exit((void *) i);
-	// O comando "return" abaixo é desnecessário, mas presente aqui para compatibilidade
+	// O comando "return" abaixo ï¿½ desnecessï¿½rio, mas presente aqui para compatibilidade
 	// com o Visual Studio da Microsoft
 	return(0);
 }//Thread urso
