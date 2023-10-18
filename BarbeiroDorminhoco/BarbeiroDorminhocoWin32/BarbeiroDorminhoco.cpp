@@ -1,21 +1,21 @@
 /*********************************************************************************
 *
-*  AUTOMAÇÃO EM TEMPO REAL - ELT012
+*  AUTOMAï¿½ï¿½O EM TEMPO REAL - ELT012
 *  Prof. Luiz T. S. Mendes - 2021/2
 *
 *  Atividade em classe: "O problema barbeiro dorminhoco"
 *
-*  Este programa deve ser completado com as linhas de programa necessárias
+*  Este programa deve ser completado com as linhas de programa necessï¿½rias
 *  para solucionar o "problema do banheiro dorminhoco" ("The Sleeping Barber").
 *
-*  O programa é composto de uma thread primária e 11 threads secundárias. A thread
-*  primária cria os objetos de sincronização e as threads secundárias. As threads
-*  secundárias correspondem ao barbeiro e a 10 clientes.
+*  O programa ï¿½ composto de uma thread primï¿½ria e 11 threads secundï¿½rias. A thread
+*  primï¿½ria cria os objetos de sincronizaï¿½ï¿½o e as threads secundï¿½rias. As threads
+*  secundï¿½rias correspondem ao barbeiro e a 10 clientes.
 *
-* A sinalização de término de programa é feita através da tecla ESC. Leituras da
-* última tecla digitada devem ser feitas em pontos apropriados para que as threads
-* detectem esta tecla. Este tipo de sincronização, contudo, irá falhar sempre
-* que o ESC for digitado e as threads secundárias estiverem bloqueadas na função
+* A sinalizaï¿½ï¿½o de tï¿½rmino de programa ï¿½ feita atravï¿½s da tecla ESC. Leituras da
+* ï¿½ltima tecla digitada devem ser feitas em pontos apropriados para que as threads
+* detectem esta tecla. Este tipo de sincronizaï¿½ï¿½o, contudo, irï¿½ falhar sempre
+* que o ESC for digitado e as threads secundï¿½rias estiverem bloqueadas na funï¿½ï¿½o
 * WaitForSingleObject().
 *
 **********************************************************************************/
@@ -29,7 +29,7 @@
 
 #include "CheckForError.h"
 
-typedef unsigned (WINAPI *CAST_FUNCTION)(LPVOID);	// Casting para terceiro e sexto parâmetros da função
+typedef unsigned (WINAPI *CAST_FUNCTION)(LPVOID);	// Casting para terceiro e sexto parï¿½metros da funï¿½ï¿½o
                                                     // _beginthreadex
 typedef unsigned *CAST_LPDWORD;
 
@@ -38,26 +38,27 @@ typedef unsigned *CAST_LPDWORD;
 #define HLRED   FOREGROUND_RED   | FOREGROUND_INTENSITY
 
 #define	ESC				0x1B			// Tecla para encerrar o programa
-#define N_CLIENTES		10			// Número de clientes
-#define N_LUGARES       5           // Número de cadeiras (4 de espera e 1 de barbear)
+#define N_CLIENTES		10			// Nï¿½mero de clientes
+#define N_LUGARES       5           // Nï¿½mero de cadeiras (4 de espera e 1 de barbear)
 
-DWORD WINAPI ThreadBarbeiro();		// Thread´representando o babrbeiro
+DWORD WINAPI ThreadBarbeiro();		// Threadï¿½representando o babrbeiro
 DWORD WINAPI ThreadCliente(int);		// Thread representando o cliente
 
-void FazABarbaDoCliente(int);		// Função que simula o ato de fazer a barba
-void TemABarbaFeita(int);			// Função que simula o ato de ter a barba feita
+void FazABarbaDoCliente(int);		// Funï¿½ï¿½o que simula o ato de fazer a barba
+void TemABarbaFeita(int);			// Funï¿½ï¿½o que simula o ato de ter a barba feita
 
 int n_clientes = 0;					// Contador de clientes
-HANDLE hBarbeiroLivre;				// Semáforo para indicar ao cliente que o barbeiro está livre
-HANDLE hAguardaCliente;				// Semáforo para indicar ao barbeiro que chegou um cliente
-HANDLE hMutex;						// Permite acesso exclusicvo à variável n_clientes
+HANDLE hBarbeiroLivre;				// Semï¿½foro para indicar ao cliente que o barbeiro estï¿½ livre
+HANDLE hAguardaCliente;				// Semï¿½foro para indicar ao barbeiro que chegou um cliente
+HANDLE hMutex;						// Permite acesso exclusicvo ï¿½ variï¿½vel n_clientes
+HANDLE hEscEvent;					// Handle para Evento Aborta
 
-int nTecla;							// Variável que armazena a tecla digitada para sair
+int nTecla;							// Variï¿½vel que armazena a tecla digitada para sair
 int id_cliente;                     // Identificador do cliente
 
-HANDLE hOut;						// Handle para a saída da console
+HANDLE hOut;						// Handle para a saï¿½da da console
 
-// THREAD PRIMÁRIA
+// THREAD PRIMï¿½RIA
 int main(){
 
 	HANDLE hThreads[N_CLIENTES+1];       // N clientes mais o barbeiro
@@ -66,32 +67,35 @@ int main(){
 	DWORD dwRet;
 	int i;
 
-	// Obtém um handle para a saída da console
+	// Obtï¿½m um handle para a saï¿½da da console
 	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hOut == INVALID_HANDLE_VALUE)
-		printf("Erro ao obter handle para a saída da console\n");
+		printf("Erro ao obter handle para a saï¿½da da console\n");
 
-	// Cria objetos de sincronização
-    // [INSIRA AQUI OS COMANDOS DE CRIAÇÃO DO MUTEX / SEMÁFOROS]
+	// Cria objetos de sincronizaï¿½ï¿½o
+    // [INSIRA AQUI OS COMANDOS DE CRIAï¿½ï¿½O DO MUTEX / SEMï¿½FOROS]
 	hMutex = CreateMutex(NULL, FALSE, "N_CLIENTES");
 	CheckForError(hMutex);
 
 	hBarbeiroLivre = CreateSemaphore(NULL, 1, 1, "BARBEIRO_LIVRE");
 	CheckForError(hBarbeiroLivre);
 
-	hAguardaCliente = CreateSemaphore(NULL, 1, 1, "AGUARDA_CLIENTE");
+	hAguardaCliente = CreateSemaphore(NULL, 0, 1, "AGUARDA_CLIENTE");
 	CheckForError(hAguardaCliente);
 
-	// Criação de threads
+	hEscEvent	= CreateEvent(NULL, TRUE, FALSE,"EscEvento");
+	CheckForError(hEscEvent);
+
+	// Criaï¿½ï¿½o de threads
 	// Note que _beginthreadex() retorna -1L em caso de erro
 	for (i=0; i<N_CLIENTES; ++i) {
 		hThreads[i] = (HANDLE) _beginthreadex(
 						       NULL,
 							   0,
-							   (CAST_FUNCTION) ThreadCliente,	//Casting necessário
+							   (CAST_FUNCTION) ThreadCliente,	//Casting necessï¿½rio
 							   (LPVOID)(INT_PTR)i,
 							   0,								
-							   (CAST_LPDWORD)&dwIdCliente);		//Casting necessário
+							   (CAST_LPDWORD)&dwIdCliente);		//Casting necessï¿½rio
 		SetConsoleTextAttribute(hOut, WHITE);
 		if (hThreads[i] != (HANDLE) -1L)
 			printf("Thread Cliente %d criada com Id=%0x\n", i, dwIdCliente);
@@ -104,10 +108,10 @@ int main(){
 	hThreads[N_CLIENTES] = (HANDLE) _beginthreadex(
 					       NULL,
 						   0,
-						   (CAST_FUNCTION) ThreadBarbeiro,	//Casting necessário
+						   (CAST_FUNCTION) ThreadBarbeiro,	//Casting necessï¿½rio
 						   (LPVOID)(INT_PTR)i,
 						   0,								
-						   (CAST_LPDWORD)&dwIdBarbeiro);		//Casting necessário
+						   (CAST_LPDWORD)&dwIdBarbeiro);		//Casting necessï¿½rio
 	SetConsoleTextAttribute(hOut, WHITE);
 	if (hThreads[N_CLIENTES] != (HANDLE)-1L)
 		printf("Thread Barbeiro  %d criada com Id=%0x\n", i, dwIdBarbeiro);
@@ -120,8 +124,9 @@ int main(){
 	do {
 		nTecla = _getch();
 	} while (nTecla != ESC);
+	SetEvent(hEscEvent);
 	
-	// Aguarda término das threads homens e mulheres
+	// Aguarda tï¿½rmino das threads homens e mulheres
 	dwRet = WaitForMultipleObjects(N_CLIENTES+1,hThreads,TRUE,INFINITE);
 	CheckForError(dwRet==WAIT_OBJECT_0);
 	
@@ -130,7 +135,7 @@ int main(){
 		CloseHandle(hThreads[i]);
 	//for
 
-	// Fecha os handles dos objetos de sincronização
+	// Fecha os handles dos objetos de sincronizaï¿½ï¿½o
 	// [INSIRA AQUI AS CHAMADAS DE FECHAMENTO DE HANDLES]
 	CloseHandle(hMutex);
 	CloseHandle(hBarbeiroLivre);
@@ -146,10 +151,15 @@ DWORD WINAPI ThreadCliente(int i) {
 	BOOL bStatus;
 
 	LONG lOldValue;
+
+	HANDLE mult_hMutex[2] = {hMutex, hEscEvent};
+	HANDLE mult_hBarbeiroLivre[2] = {hBarbeiroLivre, hEscEvent};
+	DWORD ret;
 	
 	do {
-		WaitForSingleObject(hMutex, INFINITE);
-		// Verifica se há lugar na barbearia
+		ret = WaitForMultipleObjects(2, mult_hMutex, FALSE, INFINITE);
+		if((ret - WAIT_OBJECT_0) == 1) break;
+		// Verifica se hï¿½ lugar na barbearia
 		if (n_clientes == N_LUGARES){
 			SetConsoleTextAttribute(hOut, HLRED);
 		    printf("Cliente %d: barbearia cheia... tento de novo daqui a pouco\n", i);
@@ -164,12 +174,13 @@ DWORD WINAPI ThreadCliente(int i) {
 		printf("Cliente %d entrou na barbearia...\n", i);
 		
 		// Cliente aguarda sua vez
-		// [INSIRA AQUI O COMANDO DE SINCRONIZAÇÃO ADEQUADO]
-		WaitForSingleObject(hBarbeiroLivre, INFINITE);
+		// [INSIRA AQUI O COMANDO DE SINCRONIZAï¿½ï¿½O ADEQUADO]
+		ret = WaitForMultipleObjects(2, mult_hBarbeiroLivre, FALSE, INFINITE);
+		if((ret - WAIT_OBJECT_0) == 1) break;
 
 		// Cliente acorda o barbeiro
 		id_cliente = i;
-		// [INSIRA AQUI O COMANDO DE SINCRONIZAÇÃO ADEQUADO]
+		// [INSIRA AQUI O COMANDO DE SINCRONIZAï¿½ï¿½O ADEQUADO]
 		ReleaseSemaphore(hAguardaCliente, 1, &lOldValue);
 
 
@@ -177,7 +188,8 @@ DWORD WINAPI ThreadCliente(int i) {
 		TemABarbaFeita(i);
 		
 		// Cliente sai da barbearia
-		WaitForSingleObject(hMutex, INFINITE);
+		ret = WaitForMultipleObjects(2, mult_hMutex, FALSE, INFINITE);
+		if((ret - WAIT_OBJECT_0) == 1) break;
 		n_clientes--;
 		ReleaseMutex(hMutex);
 		SetConsoleTextAttribute(hOut, WHITE);
@@ -200,17 +212,21 @@ DWORD WINAPI ThreadBarbeiro() {
 
 	LONG lOldValue;
 
+	HANDLE mult_hAguardaCliente[2] = {hAguardaCliente, hEscEvent};
+	DWORD ret;
+	
 	do {
 
-		// Tira um cochilo até um cliente chegar
-		// [INSIRA AQUI O COMANDO DE SINCRONIZAÇÃO ADEQUADO]
-		WaitForSingleObject(hAguardaCliente, INFINITE);
+		// Tira um cochilo atï¿½ um cliente chegar
+		// [INSIRA AQUI O COMANDO DE SINCRONIZAï¿½ï¿½O ADEQUADO]
+		ret = WaitForMultipleObjects(2, mult_hAguardaCliente, FALSE, INFINITE);
+		if((ret - WAIT_OBJECT_0) == 1) break;
 
 		// Faz a barba do cliente
 		FazABarbaDoCliente(id_cliente);
 
-		// Sinaliza que está livre para atender o próximo cliente
-		// [INSIRA AQUI O COMANDO DE SINCRONIZAÇÃO ADEQUADO]
+		// Sinaliza que estï¿½ livre para atender o prï¿½ximo cliente
+		// [INSIRA AQUI O COMANDO DE SINCRONIZAï¿½ï¿½O ADEQUADO]
 		ReleaseSemaphore(hBarbeiroLivre, 1, &lOldValue);
 
 	} while (nTecla != ESC);
