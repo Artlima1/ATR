@@ -84,7 +84,7 @@ int main(){
 	hBarbeiroLivre = CreateSemaphore(NULL, N_BARBEIROS, N_BARBEIROS, "BARBEIRO_LIVRE_SEM");
 	CheckForError(hBarbeiroLivre);
 
-	hAguardaCliente = CreateSemaphore(NULL, N_BARBEIROS, N_BARBEIROS, "AGUARDA_CLIENTE_SEM");
+	hAguardaCliente = CreateSemaphore(NULL, 0, N_BARBEIROS, "AGUARDA_CLIENTE_SEM");
 	CheckForError(hAguardaCliente);
 
 	// Cria��o de threads
