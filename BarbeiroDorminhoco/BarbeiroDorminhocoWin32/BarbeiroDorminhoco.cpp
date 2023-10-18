@@ -75,7 +75,6 @@ int main(){
 		printf("Erro ao obter handle para a sa�da da console\n");
 
 	// Cria objetos de sincroniza��o
-    // [INSIRA AQUI OS COMANDOS DE CRIA��O DO MUTEX / SEM�FOROS]
 	hMutex_n_clientes = CreateMutex(NULL, FALSE, "N_CLIENTES_MUTEX");
 	CheckForError(hMutex_n_clientes);
 
@@ -134,13 +133,13 @@ int main(){
 	CheckForError(dwRet==WAIT_OBJECT_0);
 	
 	// Fecha todos os handles de objetos do kernel
-	for (int i=0; i<N_CLIENTES+1; ++i)
+	for (int i=0; i<N_CLIENTES+N_BARBEIROS; ++i)
 		CloseHandle(hThreads[i]);
 	//for
 
 	// Fecha os handles dos objetos de sincroniza��o
-	// [INSIRA AQUI AS CHAMADAS DE FECHAMENTO DE HANDLES]
 	CloseHandle(hMutex_n_clientes);
+	CloseHandle(hMutex_cadeiras);
 	CloseHandle(hBarbeiroLivre);
 	CloseHandle(hAguardaCliente);
 
