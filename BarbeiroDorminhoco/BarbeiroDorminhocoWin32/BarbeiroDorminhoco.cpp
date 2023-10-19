@@ -50,25 +50,25 @@ void FazABarbaDoCliente(int id_cliente, int id_barbeiro, int cadeira);		// Fun�
 void TemABarbaFeita(int id_cliente, int cadeira);				// Fun��o que simula o ato de ter a barba feita
 
 int n_clientes = 0;					// Contador de clientes
-HANDLE hBarbeiroLivre;				// Sem�foro para indicar ao cliente que o barbeiro est� livre
-HANDLE hAguardaCliente;				// Sem�foro para indicar ao barbeiro que chegou um cliente
+HANDLE hBarbeiroLivre;				// Sem�foro para indicar aos clientes que pelo menos um barbeiro est� livre
+HANDLE hAguardaCliente;				// Sem�foro para indicar aos barbeiros que chegou pelo menos um cliente
 
-HANDLE hEscEvent;
+HANDLE hEscEvent;					// Evento de finalizacao do programa
 HANDLE hMutex_n_clientes;			// Permite acesso exclusicvo � vari�vel n_clientes
 HANDLE hMutex_cadeiras;				// Permite acesso exclusicvo � vari�vel n_clientes
 
-int nTecla;								// Vari�vel que armazena a tecla digitada para sair
-int id_cliente_cadeira[N_BARBEIROS];    // Identificador do cliente para cada barbeiro
-int cadeira_livre=0; int cadeira_ocupada=0;
-HANDLE hFimDoCorte[N_BARBEIROS];
+int nTecla;									// Vari�vel que armazena a tecla digitada para sair
+int id_cliente_cadeira[N_BARBEIROS];    	// Lista circular de cadeiras para os clientes, armazenando o id
+int cadeira_livre=0; int cadeira_ocupada=0;	// Contadores para lista circular
+HANDLE hFimDoCorte[N_BARBEIROS];			// Semáforos para notificar cliente do fim do corte
 
 HANDLE hOut;					// Handle para a sa�da da console
-HANDLE hPrint;
+HANDLE hPrint;					// Mutex para controlar prints
 
 // THREAD PRIM�RIA
 int main(){
 
-	HANDLE hThreads[N_CLIENTES+N_BARBEIROS];       // N clientes mais o barbeiro
+	HANDLE hThreads[N_CLIENTES+N_BARBEIROS];       // N clientes mais os barbeiros
 	DWORD dwIdBarbeiro, dwIdCliente;
 	DWORD dwExitCode = 0;
 	DWORD dwRet;
@@ -219,12 +219,14 @@ DWORD WINAPI ThreadCliente(int i) {
 		ret = WaitForMultipleObjects(2, mult_hBarbeiroLivre, FALSE, INFINITE);
 		if((ret - WAIT_OBJECT_0) == 1) break;
 
-		// Verifica cadeira livre
+		// Ocupa primeira cadeira livre
 		WaitForMultipleObjects(2, mult_hMutexCadeiras, FALSE, INFINITE);
 		if((ret - WAIT_OBJECT_0) == 1) break;
+
 		id_cliente_cadeira[cadeira_livre] = i;
 		int cadeira = cadeira_livre;
 		cadeira_livre = (cadeira_livre+1) % N_BARBEIROS;
+
 		ReleaseMutex(hMutex_cadeiras);
 
 		// Acorda um barbeiro livre
@@ -273,11 +275,15 @@ DWORD WINAPI ThreadBarbeiro(int i) {
 		// Tira um cochilo at� um cliente chegar
 		ret = WaitForMultipleObjects(2, mult_hAguardaCliente, FALSE, INFINITE);
 		if((ret - WAIT_OBJECT_0) == 1) break;
+
+		// Vai até a primeira cadeira ocupada
 		ret = WaitForMultipleObjects(2, mult_hMutexCadeira, FALSE, INFINITE);
 		if((ret - WAIT_OBJECT_0) == 1) break;
+
 		int id_cliente = id_cliente_cadeira[cadeira_ocupada];
 		int cadeira = cadeira_ocupada;
 		cadeira_ocupada = (cadeira_ocupada + 1) % N_BARBEIROS;
+		
 		ReleaseMutex(hMutex_cadeiras);
 
 		// Faz a barba do cliente
@@ -304,6 +310,7 @@ void FazABarbaDoCliente(int id_cliente, int id_barbeiro, int cadeira) {
 	printf("Barbeiro %d fazendo a barba do cliente %d na cadeira %d...\n", id_barbeiro, id_cliente, cadeira);
 	ReleaseMutex(hPrint);
 
+	// Faz o servico em tempo randomico e sinaliza para o cliente que acabou
 	Sleep((rand() % 1000) + 1000);
 	ReleaseSemaphore(hFimDoCorte[cadeira], 1, NULL);
 	return;
@@ -311,6 +318,7 @@ void FazABarbaDoCliente(int id_cliente, int id_barbeiro, int cadeira) {
 
 void TemABarbaFeita(int id_cliente, int cadeira) {
 
+	// Aguarda ate que barbeiro notifique que finalizou
 	HANDLE mult_hFimDoCorte[2] = { hFimDoCorte[cadeira], hEscEvent};
 	DWORD ret = WaitForMultipleObjects(2, mult_hFimDoCorte, FALSE, INFINITE);
 	if ((ret - WAIT_OBJECT_0) == 1) return;
