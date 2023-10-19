@@ -41,28 +41,34 @@ typedef unsigned *CAST_LPDWORD;
 #define N_CLIENTES		10			// N�mero de clientes
 #define N_LUGARES       5           // N�mero de cadeiras (4 de espera e 1 de barbear)
 
-DWORD WINAPI ThreadBarbeiro();		// Thread�representando o babrbeiro
+#define N_BARBEIROS     2           // N�mero de Barbeiros
+
+DWORD WINAPI ThreadBarbeiro(int i);		// Thread�representando o barbeiro
 DWORD WINAPI ThreadCliente(int);		// Thread representando o cliente
 
-void FazABarbaDoCliente(int);		// Fun��o que simula o ato de fazer a barba
-void TemABarbaFeita(int);			// Fun��o que simula o ato de ter a barba feita
+void FazABarbaDoCliente(int id_cliente, int id_barbeiro, int cadeira);		// Fun��o que simula o ato de fazer a barba
+void TemABarbaFeita(int id_cliente, int cadeira);				// Fun��o que simula o ato de ter a barba feita
 
 int n_clientes = 0;					// Contador de clientes
 HANDLE hBarbeiroLivre;				// Sem�foro para indicar ao cliente que o barbeiro est� livre
 HANDLE hAguardaCliente;				// Sem�foro para indicar ao barbeiro que chegou um cliente
-HANDLE hMutex;						// Permite acesso exclusicvo � vari�vel n_clientes
-HANDLE hEscEvent;					// Handle para Evento Aborta
 
-int nTecla;							// Vari�vel que armazena a tecla digitada para sair
-int id_cliente;                     // Identificador do cliente
+HANDLE hEscEvent;
+HANDLE hMutex_n_clientes;			// Permite acesso exclusicvo � vari�vel n_clientes
+HANDLE hMutex_cadeiras;				// Permite acesso exclusicvo � vari�vel n_clientes
 
-HANDLE hOut;						// Handle para a sa�da da console
-HANDLE hPrint;						// Handle para a fazer print
+int nTecla;								// Vari�vel que armazena a tecla digitada para sair
+int id_cliente_cadeira[N_BARBEIROS];    // Identificador do cliente para cada barbeiro
+int cadeira_livre=0; int cadeira_ocupada=0;
+HANDLE hFimDoCorte[N_BARBEIROS];
+
+HANDLE hOut;					// Handle para a sa�da da console
+HANDLE hPrint;
 
 // THREAD PRIM�RIA
 int main(){
 
-	HANDLE hThreads[N_CLIENTES+1];       // N clientes mais o barbeiro
+	HANDLE hThreads[N_CLIENTES+N_BARBEIROS];       // N clientes mais o barbeiro
 	DWORD dwIdBarbeiro, dwIdCliente;
 	DWORD dwExitCode = 0;
 	DWORD dwRet;
@@ -74,21 +80,30 @@ int main(){
 		printf("Erro ao obter handle para a sa�da da console\n");
 
 	// Cria objetos de sincroniza��o
-    // [INSIRA AQUI OS COMANDOS DE CRIA��O DO MUTEX / SEM�FOROS]
-	hMutex = CreateMutex(NULL, FALSE, "N_CLIENTES");
-	CheckForError(hMutex);
 
 	hPrint = CreateMutex(NULL, FALSE, "N_CLIENTES");
 	CheckForError(hPrint);
 
-	hBarbeiroLivre = CreateSemaphore(NULL, 1, 1, "BARBEIRO_LIVRE");
-	CheckForError(hBarbeiroLivre);
-
-	hAguardaCliente = CreateSemaphore(NULL, 0, 1, "AGUARDA_CLIENTE");
-	CheckForError(hAguardaCliente);
-
 	hEscEvent	= CreateEvent(NULL, TRUE, FALSE,"EscEvento");
 	CheckForError(hEscEvent);
+
+	hMutex_n_clientes = CreateMutex(NULL, FALSE, "N_CLIENTES_MUTEX");
+	CheckForError(hMutex_n_clientes);
+
+	hMutex_cadeiras = CreateMutex(NULL, FALSE, "CADEIRAS_MUTEX");
+	CheckForError(hMutex_cadeiras);
+
+	hBarbeiroLivre = CreateSemaphore(NULL, N_BARBEIROS, N_BARBEIROS, "BARBEIRO_LIVRE_SEM");
+	CheckForError(hBarbeiroLivre);
+
+	hAguardaCliente = CreateSemaphore(NULL, 0, N_BARBEIROS, "AGUARDA_CLIENTE_SEM");
+	CheckForError(hAguardaCliente);
+
+	char CorteName[7];
+	for(i=0; i<N_BARBEIROS; i++){
+		sprintf(CorteName, "Corte%d", i);
+		hFimDoCorte[i] = CreateSemaphore(NULL, 0, 1, CorteName);
+	}
 
 	// Cria��o de threads
 	// Note que _beginthreadex() retorna -1L em caso de erro
@@ -100,7 +115,6 @@ int main(){
 							   (LPVOID)(INT_PTR)i,
 							   0,								
 							   (CAST_LPDWORD)&dwIdCliente);		//Casting necess�rio
-
 		WaitForSingleObject(hPrint, INFINITE);
 		SetConsoleTextAttribute(hOut, WHITE);
 		if (hThreads[i] != (HANDLE) -1L){
@@ -114,26 +128,27 @@ int main(){
 		}
 	}//for
 
-	hThreads[N_CLIENTES] = (HANDLE) _beginthreadex(
-					       NULL,
-						   0,
-						   (CAST_FUNCTION) ThreadBarbeiro,	//Casting necess�rio
-						   (LPVOID)(INT_PTR)i,
-						   0,								
-						   (CAST_LPDWORD)&dwIdBarbeiro);		//Casting necess�rio
-
-	
-	WaitForSingleObject(hPrint, INFINITE);
-	SetConsoleTextAttribute(hOut, WHITE);
-	if (hThreads[N_CLIENTES] != (HANDLE)-1L){
-		printf("Thread Barbeiro  %d criada com Id=%0x\n", i, dwIdBarbeiro);
-	   ReleaseMutex(hPrint);
-	}
-	else {
-	   printf("Erro na criacao da thread Barbeiro! N = %d Erro = %d\n", i, errno);
-	   ReleaseMutex(hPrint);
-	   exit(0);
-	}
+	for (i=0; i<N_BARBEIROS; ++i) {
+		hThreads[N_CLIENTES+i] = (HANDLE) _beginthreadex(
+						       NULL,
+							   0,
+							   (CAST_FUNCTION) ThreadBarbeiro,	//Casting necess�rio
+							   (LPVOID)(INT_PTR)i,
+							   0,								
+							   (CAST_LPDWORD)&dwIdBarbeiro);		//Casting necess�rio
+		
+		if (hThreads[i] != (HANDLE)-1L) {
+			WaitForSingleObject(hPrint, INFINITE);
+			SetConsoleTextAttribute(hOut, WHITE);
+			printf("Thread Barbeiro %d criada com Id=%0x\n", i, dwIdBarbeiro);
+			ReleaseMutex(hPrint);
+		}
+		else {
+			printf("Erro na criacao da thread Cliente! N = %d Codigo = %d\n", i, errno);
+			ReleaseMutex(hPrint);
+			exit(0);
+		}
+	}//for
 	
 	// Leitura do teclado
 	do {
@@ -142,19 +157,22 @@ int main(){
 	SetEvent(hEscEvent);
 	
 	// Aguarda t�rmino das threads homens e mulheres
-	dwRet = WaitForMultipleObjects(N_CLIENTES+1,hThreads,TRUE,INFINITE);
+
+	dwRet = WaitForMultipleObjects(N_CLIENTES+N_BARBEIROS,hThreads,TRUE,INFINITE);
 	CheckForError(dwRet==WAIT_OBJECT_0);
 	
 	// Fecha todos os handles de objetos do kernel
-	for (int i=0; i<N_CLIENTES+1; ++i)
+	for (int i=0; i<N_CLIENTES+N_BARBEIROS; ++i)
 		CloseHandle(hThreads[i]);
 	//for
 
 	// Fecha os handles dos objetos de sincroniza��o
-	// [INSIRA AQUI AS CHAMADAS DE FECHAMENTO DE HANDLES]
-	CloseHandle(hMutex);
+
+	CloseHandle(hMutex_n_clientes);
+	CloseHandle(hMutex_cadeiras);
 	CloseHandle(hBarbeiroLivre);
 	CloseHandle(hAguardaCliente);
+	CloseHandle(hPrint);
 
 	return EXIT_SUCCESS;
 	
@@ -167,52 +185,59 @@ DWORD WINAPI ThreadCliente(int i) {
 
 	LONG lOldValue;
 
-	HANDLE mult_hMutex[2] = {hMutex, hEscEvent};
+	HANDLE mult_hMutexClientes[2] = {hMutex_n_clientes, hEscEvent};
 	HANDLE mult_hBarbeiroLivre[2] = {hBarbeiroLivre, hEscEvent};
+	HANDLE mult_hMutexCadeiras[2] = {hMutex_cadeiras, hEscEvent};
 	DWORD ret;
 	
 	do {
-		ret = WaitForMultipleObjects(2, mult_hMutex, FALSE, INFINITE);
+		ret = WaitForMultipleObjects(2, mult_hMutexClientes, FALSE, INFINITE);
 		if((ret - WAIT_OBJECT_0) == 1) break;
 		// Verifica se h� lugar na barbearia
 		if (n_clientes == N_LUGARES){
+
 			WaitForSingleObject(hPrint, INFINITE);
 			SetConsoleTextAttribute(hOut, HLRED);
 		    printf("Cliente %d: barbearia cheia... tento de novo daqui a pouco\n", i);
 			ReleaseMutex(hPrint);
 
-			ReleaseMutex(hMutex);
+			ReleaseMutex(hMutex_n_clientes);
 			Sleep(2000); //Simula uma voltinha nas redondezas
 			continue;
 		}
 		// Cliente entra na barbearia
 		n_clientes++;
-		ReleaseMutex(hMutex);
 
+		ReleaseMutex(hMutex_n_clientes);
+		
 		WaitForSingleObject(hPrint, INFINITE);
 		SetConsoleTextAttribute(hOut, WHITE);
 		printf("Cliente %d entrou na barbearia...\n", i);
 		ReleaseMutex(hPrint);
 
 		// Cliente aguarda sua vez
-		// [INSIRA AQUI O COMANDO DE SINCRONIZA��O ADEQUADO]
 		ret = WaitForMultipleObjects(2, mult_hBarbeiroLivre, FALSE, INFINITE);
 		if((ret - WAIT_OBJECT_0) == 1) break;
 
-		// Cliente acorda o barbeiro
-		id_cliente = i;
-		// [INSIRA AQUI O COMANDO DE SINCRONIZA��O ADEQUADO]
+		// Verifica cadeira livre
+		WaitForMultipleObjects(2, mult_hMutexCadeiras, FALSE, INFINITE);
+		if((ret - WAIT_OBJECT_0) == 1) break;
+		id_cliente_cadeira[cadeira_livre] = i;
+		int cadeira = cadeira_livre;
+		cadeira_livre = (cadeira_livre+1) % N_BARBEIROS;
+		ReleaseMutex(hMutex_cadeiras);
+
+		// Acorda um barbeiro livre
 		ReleaseSemaphore(hAguardaCliente, 1, &lOldValue);
 
-
 		// Cliente tem sua barba feita pelo barbeiro
-		TemABarbaFeita(i);
+		TemABarbaFeita(i, cadeira);
 		
 		// Cliente sai da barbearia
-		ret = WaitForMultipleObjects(2, mult_hMutex, FALSE, INFINITE);
+		ret = WaitForMultipleObjects(2, mult_hMutexClientes, FALSE, INFINITE);
 		if((ret - WAIT_OBJECT_0) == 1) break;
 		n_clientes--;
-		ReleaseMutex(hMutex);
+		ReleaseMutex(mult_hMutexClientes);
 
 		WaitForSingleObject(hPrint, INFINITE);
 		SetConsoleTextAttribute(hOut, WHITE);
@@ -232,7 +257,7 @@ DWORD WINAPI ThreadCliente(int i) {
 	return(0);
 }//ThreadCliente
 
-DWORD WINAPI ThreadBarbeiro() {
+DWORD WINAPI ThreadBarbeiro(int i) {
 
 	DWORD dwStatus;
 	BOOL bStatus;
@@ -240,20 +265,25 @@ DWORD WINAPI ThreadBarbeiro() {
 	LONG lOldValue;
 
 	HANDLE mult_hAguardaCliente[2] = {hAguardaCliente, hEscEvent};
+	HANDLE mult_hMutexCadeira[2] = {hMutex_cadeiras, hEscEvent};
 	DWORD ret;
 	
 	do {
 
 		// Tira um cochilo at� um cliente chegar
-		// [INSIRA AQUI O COMANDO DE SINCRONIZA��O ADEQUADO]
 		ret = WaitForMultipleObjects(2, mult_hAguardaCliente, FALSE, INFINITE);
 		if((ret - WAIT_OBJECT_0) == 1) break;
+		ret = WaitForMultipleObjects(2, mult_hMutexCadeira, FALSE, INFINITE);
+		if((ret - WAIT_OBJECT_0) == 1) break;
+		int id_cliente = id_cliente_cadeira[cadeira_ocupada];
+		int cadeira = cadeira_ocupada;
+		cadeira_ocupada = (cadeira_ocupada + 1) % N_BARBEIROS;
+		ReleaseMutex(hMutex_cadeiras);
 
 		// Faz a barba do cliente
-		FazABarbaDoCliente(id_cliente);
+		FazABarbaDoCliente(id_cliente, i, cadeira);
 
 		// Sinaliza que est� livre para atender o pr�ximo cliente
-		// [INSIRA AQUI O COMANDO DE SINCRONIZA��O ADEQUADO]
 		ReleaseSemaphore(hBarbeiroLivre, 1, &lOldValue);
 
 	} while (nTecla != ESC);
@@ -267,25 +297,27 @@ DWORD WINAPI ThreadBarbeiro() {
 	return(0);
 }//ThreadHomem
 
-void FazABarbaDoCliente(int id) {
+void FazABarbaDoCliente(int id_cliente, int id_barbeiro, int cadeira) {
 
 	WaitForSingleObject(hPrint, INFINITE);
 	SetConsoleTextAttribute(hOut, HLGREEN);
-	printf("Barbeiro fazendo a barba do cliente %d...\n", id);
+	printf("Barbeiro %d fazendo a barba do cliente %d na cadeira %d...\n", id_barbeiro, id_cliente, cadeira);
 	ReleaseMutex(hPrint);
 
-	Sleep(1000);
+	Sleep((rand() % 4000) + 1000);
+	ReleaseSemaphore(hFimDoCorte[cadeira], 1, NULL);
 	return;
 }
 
-void TemABarbaFeita(int id) {
+void TemABarbaFeita(int id_cliente, int cadeira) {
+
+	WaitForSingleObject(hFimDoCorte[cadeira], INFINITE);
 
 	WaitForSingleObject(hPrint, INFINITE);
 	SetConsoleTextAttribute(hOut, HLGREEN);
-	printf("Cliente %d tem sua barba feita...\n", id);
+	printf("Cliente %d teve sua barba feita na cadeira %d...\n", id_cliente, cadeira);
 	ReleaseMutex(hPrint);
-
-	Sleep(1000);
+	
 	return;
 }
 
