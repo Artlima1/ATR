@@ -45,8 +45,8 @@ typedef unsigned *CAST_LPDWORD;
 DWORD WINAPI ThreadBarbeiro(int i);		// Thread�representando o barbeiro
 DWORD WINAPI ThreadCliente(int);		// Thread representando o cliente
 
-void FazABarbaDoCliente(int id_cliente, int id_barbeiro);		// Fun��o que simula o ato de fazer a barba
-void TemABarbaFeita(int);			// Fun��o que simula o ato de ter a barba feita
+void FazABarbaDoCliente(int id_cliente, int id_barbeiro, int cadeira);		// Fun��o que simula o ato de fazer a barba
+void TemABarbaFeita(int id_cliente, int cadeira);				// Fun��o que simula o ato de ter a barba feita
 
 int n_clientes = 0;					// Contador de clientes
 HANDLE hBarbeiroLivre;				// Sem�foro para indicar ao cliente que o barbeiro est� livre
@@ -57,6 +57,7 @@ HANDLE hMutex_cadeiras;				// Permite acesso exclusicvo � vari�vel n_cliente
 int nTecla;								// Vari�vel que armazena a tecla digitada para sair
 int id_cliente_cadeira[N_BARBEIROS];    // Identificador do cliente para cada barbeiro
 int cadeira_livre=0; int cadeira_ocupada=0;
+HANDLE hFimDoCorte[N_BARBEIROS];
 
 HANDLE hOut;						// Handle para a sa�da da console
 
@@ -86,6 +87,12 @@ int main(){
 
 	hAguardaCliente = CreateSemaphore(NULL, 0, N_BARBEIROS, "AGUARDA_CLIENTE_SEM");
 	CheckForError(hAguardaCliente);
+
+	char CorteName[7];
+	for(i=0; i<N_BARBEIROS; i++){
+		sprintf(CorteName, "Corte%d", i);
+		hFimDoCorte[i] = CreateSemaphore(NULL, 0, 1, CorteName);
+	}
 
 	// Cria��o de threads
 	// Note que _beginthreadex() retorna -1L em caso de erro
@@ -176,12 +183,13 @@ DWORD WINAPI ThreadCliente(int i) {
 		// Cliente acorda o barbeiro
 		WaitForSingleObject(hMutex_cadeiras, INFINITE);
 		id_cliente_cadeira[cadeira_livre] = i;
+		int cadeira = cadeira_livre;
 		cadeira_livre = (cadeira_livre+1) % N_BARBEIROS;
 		ReleaseMutex(hMutex_cadeiras);
 		ReleaseSemaphore(hAguardaCliente, 1, &lOldValue);
 
 		// Cliente tem sua barba feita pelo barbeiro
-		TemABarbaFeita(i);
+		TemABarbaFeita(i, cadeira);
 		
 		// Cliente sai da barbearia
 		WaitForSingleObject(hMutex_n_clientes, INFINITE);
@@ -213,10 +221,11 @@ DWORD WINAPI ThreadBarbeiro(int i) {
 		WaitForSingleObject(hAguardaCliente, INFINITE);
 		WaitForSingleObject(hMutex_cadeiras, INFINITE);
 		int id_cliente = id_cliente_cadeira[cadeira_ocupada];
+		int cadeira = cadeira_ocupada;
 		cadeira_ocupada = (cadeira_ocupada + 1) % N_BARBEIROS;
 		ReleaseMutex(hMutex_cadeiras);
 		// Faz a barba do cliente
-		FazABarbaDoCliente(id_cliente, i);
+		FazABarbaDoCliente(id_cliente, i, cadeira);
 
 		// Sinaliza que est� livre para atender o pr�ximo cliente
 		ReleaseSemaphore(hBarbeiroLivre, 1, &lOldValue);
@@ -229,19 +238,20 @@ DWORD WINAPI ThreadBarbeiro(int i) {
 	return(0);
 }//ThreadHomem
 
-void FazABarbaDoCliente(int id_cliente, int id_barbeiro) {
+void FazABarbaDoCliente(int id_cliente, int id_barbeiro, int cadeira) {
 
 	SetConsoleTextAttribute(hOut, HLGREEN);
-	printf("Barbeiro %d fazendo a barba do cliente %d...\n", id_barbeiro, id_cliente);
+	printf("Barbeiro %d fazendo a barba do cliente %d na cadeira %d...\n", id_barbeiro, id_cliente, cadeira);
 	Sleep(rand() % 1000);
+	ReleaseSemaphore(hFimDoCorte[cadeira], 1, NULL);
 	return;
 }
 
-void TemABarbaFeita(int id) {
+void TemABarbaFeita(int id_cliente, int cadeira) {
 
 	SetConsoleTextAttribute(hOut, HLGREEN);
-	printf("Cliente %d tem sua barba feita...\n", id);
-	Sleep(rand() % 1000);
+	WaitForSingleObject(hFimDoCorte[cadeira], INFINITE);
+	printf("Cliente %d teve sua barba feita na cadeira %d...\n", id_cliente, cadeira);
 	return;
 }
 
