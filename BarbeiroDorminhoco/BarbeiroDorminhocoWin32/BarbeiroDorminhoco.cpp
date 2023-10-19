@@ -38,10 +38,10 @@ typedef unsigned *CAST_LPDWORD;
 #define HLRED   FOREGROUND_RED   | FOREGROUND_INTENSITY
 
 #define	ESC				0x1B			// Tecla para encerrar o programa
-#define N_CLIENTES		10			// N�mero de clientes
+#define N_CLIENTES		15			// N�mero de clientes
 #define N_LUGARES       5           // N�mero de cadeiras (4 de espera e 1 de barbear)
 
-#define N_BARBEIROS     2           // N�mero de Barbeiros
+#define N_BARBEIROS     3           // N�mero de Barbeiros
 
 DWORD WINAPI ThreadBarbeiro(int i);		// Thread�representando o barbeiro
 DWORD WINAPI ThreadCliente(int);		// Thread representando o cliente
@@ -84,7 +84,7 @@ int main(){
 	hPrint = CreateMutex(NULL, FALSE, "N_CLIENTES");
 	CheckForError(hPrint);
 
-	hEscEvent	= CreateEvent(NULL, TRUE, FALSE,"EscEvento");
+	hEscEvent	= CreateEvent(NULL, TRUE, FALSE, "EscEvento");
 	CheckForError(hEscEvent);
 
 	hMutex_n_clientes = CreateMutex(NULL, FALSE, "N_CLIENTES_MUTEX");
@@ -237,7 +237,7 @@ DWORD WINAPI ThreadCliente(int i) {
 		ret = WaitForMultipleObjects(2, mult_hMutexClientes, FALSE, INFINITE);
 		if((ret - WAIT_OBJECT_0) == 1) break;
 		n_clientes--;
-		ReleaseMutex(mult_hMutexClientes);
+		ReleaseMutex(hMutex_n_clientes);
 
 		WaitForSingleObject(hPrint, INFINITE);
 		SetConsoleTextAttribute(hOut, WHITE);
@@ -304,14 +304,16 @@ void FazABarbaDoCliente(int id_cliente, int id_barbeiro, int cadeira) {
 	printf("Barbeiro %d fazendo a barba do cliente %d na cadeira %d...\n", id_barbeiro, id_cliente, cadeira);
 	ReleaseMutex(hPrint);
 
-	Sleep((rand() % 4000) + 1000);
+	Sleep((rand() % 1000) + 1000);
 	ReleaseSemaphore(hFimDoCorte[cadeira], 1, NULL);
 	return;
 }
 
 void TemABarbaFeita(int id_cliente, int cadeira) {
 
-	WaitForSingleObject(hFimDoCorte[cadeira], INFINITE);
+	HANDLE mult_hFimDoCorte[2] = { hFimDoCorte[cadeira], hEscEvent};
+	DWORD ret = WaitForMultipleObjects(2, mult_hFimDoCorte, FALSE, INFINITE);
+	if ((ret - WAIT_OBJECT_0) == 1) return;
 
 	WaitForSingleObject(hPrint, INFINITE);
 	SetConsoleTextAttribute(hOut, HLGREEN);
